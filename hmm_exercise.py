@@ -1,6 +1,7 @@
 import math
 import json
 import itertools
+from Bio import SeqIO
 
 def read_model(path):
     """
@@ -107,6 +108,35 @@ class HMM:
             path.append(back[i][path[-1]])
         return "".join(reversed(path)), v[-1][last]
 
+    def vitebri_plain(self, x):
+        """
+        Input: a sequence x.
+        Output: tuple[str, float], the most likely hidden path and its probability.
+        """
+        v = [{} for _ in x]
+        back = [{} for _ in x]
+        for k in self.states:
+            v[0][k] = self.pi[k] * self.e[k][x[0]]
+        for i in range(1, len(x)):
+            for k in self.states:
+                best_prev = self.states[0]
+                best = v[i - 1][best_prev] * self.a[best_prev][k]
+                for j in self.states[1:]:
+                    score = v[i - 1][j] * self.a[j][k]
+                    if score > best:
+                        best = score
+                        best_prev = j
+                v[i][k] = best * self.e[k][x[i]]
+                back[i][k] = best_prev
+        last = self.states[0]
+        for k in self.states[1:]:
+            if v[-1][k] > v[-1][last]:
+                last = k
+        path = [last]
+        for i in range(len(x) - 1, 0, -1):
+            path.append(back[i][path[-1]])
+        return "".join(reversed(path)), v[-1][last]
+
 
 def task1(model):
     print(model.states)  # Output: ["H", "L"]
@@ -119,10 +149,17 @@ def task1(model):
 def task2(model):
     # print(model.viterbi("ssrssrrrss"))
     print(model.viterbi("phchc"))
+    print(model.vitebri_plain("phchc"))
+    for record in fasta_seqs:
+        seq = str(record.seq)
+        print(f"Sequence length: {len(seq)}")
+        print(f" log2: {model.viterbi(seq)[1]} \n plain: {model.vitebri_plain(seq)[1]}")
 
 if __name__ == "__main__":
     model_weather = read_model("weather_model.json")
     model_toy = read_model("toy_model.json")
+    fasta_seqs = list(SeqIO.parse("sequences.fasta", "fasta"))
+
     # task1(model_weather)
     # task2(model_weather)
     task2(model_toy)
