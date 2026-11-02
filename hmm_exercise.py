@@ -77,8 +77,38 @@ class HMM:
                 max_path = "".join(path)
         return max_path, max_prob, total_prob
 
-def task1():
-    model = read_model("weather_model.json")
+    def viterbi(self, x):
+        """
+        Input: a sequence x.
+        Output: tuple[str, float], the most likely hidden path and its log2 probability.
+        Example (weather): viterbi("ssrssrrrss") → ("HHHHHLLLHH", -14.14...).
+        """
+        v = [{} for _ in x]
+        back = [{} for _ in x]
+        for k in self.states:
+            v[0][k] = self.log_pi[k] + self.log_e[k][x[0]]
+        for i in range(1, len(x)):
+            for k in self.states:
+                best_prev = self.states[0]
+                best = v[i - 1][best_prev] + self.log_a[best_prev][k]
+                for j in self.states[1:]:
+                    score = v[i - 1][j] + self.log_a[j][k]
+                    if score > best:
+                        best = score
+                        best_prev = j
+                v[i][k] = best + self.log_e[k][x[i]]
+                back[i][k] = best_prev
+        last = self.states[0]
+        for k in self.states[1:]:
+            if v[-1][k] > v[-1][last]:
+                last = k
+        path = [last]
+        for i in range(len(x) - 1, 0, -1):
+            path.append(back[i][path[-1]])
+        return "".join(reversed(path)), v[-1][last]
+
+
+def task1(model):
     print(model.states)  # Output: ["H", "L"]
     print(model.alphabet)  # Output: ["s", "r"]
     print(model.joint_probability("sr", "HL"))  # Output: 0.054
@@ -86,7 +116,14 @@ def task1():
     print(log2(model.joint_probability("sr", "HL")))
     print(model.brute_force("ssrssrrrss")) # Output: ("HHHHHLLLHH", 5.53e-05, 0.000822)
 
+def task2(model):
+    # print(model.viterbi("ssrssrrrss"))
+    print(model.viterbi("phchc"))
 
 if __name__ == "__main__":
-    task1()
+    model_weather = read_model("weather_model.json")
+    model_toy = read_model("toy_model.json")
+    # task1(model_weather)
+    # task2(model_weather)
+    task2(model_toy)
 
