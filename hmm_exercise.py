@@ -25,6 +25,21 @@ def log2(p):
     else:
         return math.log2(p)
 
+def log_sum(a, b):
+    """
+    Input: a, b, two log2 values (possibly -math.inf).
+    Output: float, log2(2^a + 2^b), computed without leaving log space: max + log2(1 + 2^(min − max)).
+    Examples: log_sum(3, 3) → 4.0; log_sum(0, -math.inf) → 0.0; log_sum(-math.inf, -math.inf) → -inf.
+    """
+    if a == -math.inf:
+        return b
+    if b == -math.inf:
+        return a
+    min_val = min(a, b)
+    max_val = max(a, b)
+    return max_val + log2(1 + 2**(min_val - max_val))
+
+
 
 class HMM:
     def __init__(self, states, alphabet, pi, a, e):
@@ -137,6 +152,68 @@ class HMM:
             path.append(back[i][path[-1]])
         return "".join(reversed(path)), v[-1][last]
 
+    def forward(self, x):
+        """
+        Input: a sequence x.
+        Output: tuple[list[dict], float]: the table f, f[i][k] = log2 P(x₀ … xᵢ, zᵢ = k), and log2 P(x).
+        Example (weather): the log2 P(x) of "ssrssrrrss" is about −10.25 (P(x) = 0.000822).
+        """
+        f = [{} for _ in x]
+        for k in self.states:
+            f[0][k] = self.log_pi[k] + self.log_e[k][x[0]]
+        for i in range(1, len(x)):
+            for k in self.states:
+                total = -math.inf
+                for j in self.states:
+                    total = log_sum(total, f[i - 1][j] + self.log_a[j][k])
+                f[i][k] = total + self.log_e[k][x[i]]
+        log_prob_x = -math.inf
+        for k in self.states:
+            log_prob_x = log_sum(log_prob_x, f[-1][k])
+        return f, log_prob_x
+
+    def backward(self, x):
+        """
+        Input: a sequence x.
+        Output: tuple[list[dict], float]: the table b, b[i][k] = log2 P(xᵢ₊₁ … xₙ₋₁ | zᵢ = k), and log2 P(x).
+        Example (weather): the log2 P(x) of "ssrssrrrss" is about −10.25 (P(x) = 0.000822).
+        """
+        b = [{} for _ in x]
+        for k in self.states:
+            b[-1][k] = 0
+        for i in range(len(x) - 2, -1, -1):
+            for k in self.states:
+                total = -math.inf
+                for j in self.states:
+                    total = log_sum(total, self.log_a[k][j] + self.log_e[j][x[i + 1]] + b[i + 1][j])
+                b[i][k] = total
+        log_prob_x = -math.inf
+        for k in self.states:
+            log_prob_x = log_sum(log_prob_x, self.log_pi[k] + self.log_e[k][x[0]] + b[0][k])
+        return b, log_prob_x
+
+    def posterior(self, x):
+        """
+        Input: a sequence x.
+        Output: list[dict], for every position i and state k the probability P(zᵢ = k | x) = 2^(f[i][k] + b[i][k] − log2 P(x)) (a plain probability, not a log)        
+        """
+        f, log_px = self.forward(x)
+        b, _ = self.backward(x)
+        return [{k: 2 ** (f[i][k] + b[i][k] - log_px) for k in self.states} for i in range(len(x))]
+ 
+    def posterior_path(self, x):
+        """
+        Input: a sequence x.
+        Output: str, at every position the state with the highest posterior probability (ties: the first state).
+        """
+        path = ""
+        for column in self.posterior(x):
+            best = self.states[0]
+            for k in self.states[1:]:
+                if column[k] > column[best]:
+                    best = k
+            path += best
+        return path
 
 def task1(model):
     print(model.states)  # Output: ["H", "L"]
@@ -155,6 +232,13 @@ def task2(model):
         print(f"Sequence length: {len(seq)}")
         print(f" log2: {model.viterbi(seq)[1]} \n plain: {model.vitebri_plain(seq)[1]}")
 
+def task3(model):
+    print(model.forward("ssrssrrrss"))
+    print(model.backward("ssrssrrrss"))
+    print(model.posterior("ssrssrrrss")[2]["L"])
+    print(model.posterior_path("ssrssrrrss"))
+    return
+
 if __name__ == "__main__":
     model_weather = read_model("weather_model.json")
     model_toy = read_model("toy_model.json")
@@ -162,5 +246,6 @@ if __name__ == "__main__":
 
     # task1(model_weather)
     # task2(model_weather)
-    task2(model_toy)
+    # task2(model_toy)
+    task3(model_weather)
 
